@@ -2,8 +2,6 @@ import os
 import csv
 import pickle
 import numpy as np
-import fire
-from collections import Counter
 
 class Split:
     def read_tsv(self, fn):
@@ -55,9 +53,10 @@ class Split:
                     temp_dict['tags'][tag_list.index(tag)] = 1
                 except:
                     continue
-            if temp_dict['tags'].sum() > 0 and os.path.exists(os.path.join(self.npy_path, row[3][:-3])+'npy'):
+            if temp_dict['tags'].sum() > 0:
                 dictionary[i] = temp_dict
                 i += 1
+
         dict_fn = os.path.join(path, '%s_%s_dict.pickle'%(option, type_))
         with open(dict_fn, 'wb') as pf:
             pickle.dump(dictionary, pf)
@@ -69,16 +68,25 @@ class Split:
         self.get_npy_array(path, tag_list, option, type_='validation')
         self.get_npy_array(path, tag_list, option, type_='test')
 
-    def run(self, path):
-        self.npy_path = path
+    def run(self):
         for i in range(5):
+            print(f"SPLIT {i}")
+            print("\tall")
             self.run_iter(i, 'all')
+
+            print("\tgenre")
             self.run_iter(i, 'genre')
+
+            print("\tinstrument")
             self.run_iter(i, 'instrument')
+
+            print("\tmoodtheme")
             self.run_iter(i, 'moodtheme')
+
+            print("\ttop50tags")
             self.run_iter(i, 'top50tags')
 
 
 if __name__ == '__main__':
     s = Split()
-    fire.Fire({'run': s.run})
+    s.run()
