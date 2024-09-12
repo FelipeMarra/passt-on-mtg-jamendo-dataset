@@ -146,7 +146,6 @@ class Split:
         pool.close()
         pool.join()
 
-
         if self.verbose:
             end_time = perf_counter()
             print(f"\n It took {end_time-start_time}s to run {option} on split {split}")
