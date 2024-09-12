@@ -1,5 +1,5 @@
 # PaSST on the MTG-Jamendo Dataset
-This is a fork from the [MTG-Jamendo Dataset](https://github.com/MTG/mtg-jamendo-dataset) that aims on fine-tuning [PaSST](https://github.com/kkoutini/passt_hear21) on the it.
+This is a fork from the [MTG-Jamendo Dataset](https://github.com/MTG/mtg-jamendo-dataset) that aims on fine-tuning [PaSST](https://github.com/kkoutini/passt_hear21) on it.
 
 ## Preprocessing
 ### Converting the audios
