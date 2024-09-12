@@ -3,10 +3,7 @@ import os
 import time
 import numpy as np
 import datetime
-import tqdm
 from sklearn import metrics
-import pickle
-import csv
 
 import torch
 import torch.nn as nn
@@ -21,9 +18,9 @@ class Solver(object):
         self.valid_loader = valid_loader
 
         # Training settings
-        self.n_epochs = 500
+        self.n_epochs = 10
         self.lr = 1e-4
-        self.log_step = 10
+        self.log_step = 2
         self.is_cuda = torch.cuda.is_available()
         self.model_save_path = config.model_save_path
         self.batch_size = config.batch_size
@@ -55,7 +52,7 @@ class Solver(object):
         if self.is_cuda:
             self.model = model
             self.model.cuda()
-        self.optimizer = torch.optim.Adam(self.model.parameters(), self.lr)
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), self.lr)
 
     def load(self, filename):
         S = torch.load(filename)
@@ -72,13 +69,10 @@ class Solver(object):
 
     def train(self):
         start_t = time.time()
-        current_optimizer = 'adam'
         best_roc_auc = 0
-        drop_counter = 0
         reconst_loss = nn.BCELoss()
 
         for epoch in range(self.n_epochs):
-            drop_counter += 1
             # train
             self.model.train()
             ctr = 0
@@ -113,9 +107,6 @@ class Solver(object):
                 print('best model: %4f' % roc_auc)
                 best_roc_auc = roc_auc
                 torch.save(self.model.state_dict(), os.path.join(self.model_save_path, 'best_model.pth'))
-
-            # schedule optimizer
-            current_optimizer, drop_counter = self._schedule(current_optimizer, drop_counter)
 
         print("[%s] Train finished. Elapsed: %s"
                 % (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -182,34 +173,9 @@ class Solver(object):
             print('%s \t\t %.4f , %.4f' % (self.tag_list[i], roc_auc_all[i], pr_auc_all[i]))
         return roc_aucs, pr_aucs, roc_auc_all, pr_auc_all
 
-    def _schedule(self, current_optimizer, drop_counter):
-        if current_optimizer == 'adam' and drop_counter == 60:
-            self.load(os.path.join(self.model_save_path, 'best_model.pth'))
-            self.optimizer = torch.optim.SGD(self.model.parameters(), 0.001, momentum=0.9, weight_decay=0.0001, nesterov=True)
-            current_optimizer = 'sgd_1'
-            drop_counter = 0
-            print('sgd 1e-3')
-        # first drop
-        if current_optimizer == 'sgd_1' and drop_counter == 20:
-            self.load(os.path.join(self.model_save_path, 'best_model.pth'))
-            for pg in self.optimizer.param_groups:
-                pg['lr'] = 0.0001
-            current_optimizer = 'sgd_2'
-            drop_counter = 0
-            print('sgd 1e-4')
-        # second drop
-        if current_optimizer == 'sgd_2' and drop_counter == 20:
-            self.load(os.path.join(self.model_save_path, 'best_model.pth'))
-            for pg in self.optimizer.param_groups:
-                pg['lr'] = 0.00001
-            current_optimizer = 'sgd_3'
-            print('sgd 1e-5')
-        return current_optimizer, drop_counter
-
     def test(self):
         start_t = time.time()
         reconst_loss = nn.BCELoss()
-        epoch = 0
 
         self.load(self.model_fn)
         self.model.eval()
