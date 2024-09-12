@@ -15,8 +15,9 @@ class PaSSTMTG(nn.Module):
         self.passt.net =  get_model_passt(arch="passt_s_swa_p16_128_ap476", n_classes=n_classes)
 
     def forward(self, x):
-        print(f"\n############## Forward ##################\nx: {x.shape}\n")
-        logit = self.passt(x)
-        print(f"logit: {logit.shape} \n####################################\n")
+        #print(f"\n############## Forward ##################\nx: {x.shape}\n")
+        passt_logit = self.passt(x)
+        logit = logit = nn.Sigmoid()(passt_logit)
+        #print(f"logit: {logit.shape} \n####################################\n")
 
         return logit 

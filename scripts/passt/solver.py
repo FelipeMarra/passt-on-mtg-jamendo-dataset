@@ -11,7 +11,7 @@ import csv
 import torch
 import torch.nn as nn
 
-from model import CNN
+from model import PaSSTMTG
 
 
 class Solver(object):
@@ -50,7 +50,7 @@ class Solver(object):
 
     def build_model(self):
         # model and optimizer
-        model = CNN(num_class=self.num_class)
+        model = PaSSTMTG(n_classes=self.num_class)
 
         if self.is_cuda:
             self.model = model
