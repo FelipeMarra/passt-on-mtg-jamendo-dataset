@@ -1,5 +1,4 @@
 import torch.nn as nn
-from torch.autograd import Variable
 
 
 import torch.nn as nn
@@ -16,6 +15,6 @@ class PaSSTMTG(nn.Module):
 
     def forward(self, x):
         passt_logit = self.passt(x)
-        logit = logit = nn.Sigmoid()(passt_logit)
+        logit = nn.Sigmoid()(passt_logit)
 
         return logit 

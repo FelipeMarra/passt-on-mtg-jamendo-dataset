@@ -1,15 +1,12 @@
-# -*- coding: utf-8 -*-
 import os
 import time
 import numpy as np
 import datetime
-from sklearn import metrics
 
 import torch
 import torch.nn as nn
 
 from model import PaSSTMTG
-
 
 class Solver(object):
     def __init__(self, data_loader, valid_loader, config):
@@ -20,7 +17,7 @@ class Solver(object):
         # Training settings
         self.n_epochs = 10
         self.lr = 1e-4
-        self.log_step = 10
+        self.log_step = 50
         self.is_cuda = torch.cuda.is_available()
         self.model_save_path = config.model_save_path
         self.batch_size = config.batch_size
@@ -39,8 +36,7 @@ class Solver(object):
         elif config.subset == 'top50tags':
             self.num_class = 50
         self.model_fn = os.path.join(self.model_save_path, 'best_model.pth')
-        self.roc_auc_fn = 'roc_auc_'+config.subset+'_'+str(config.split)+'.npy'
-        self.pr_auc_fn = 'pr_auc_'+config.subset+'_'+str(config.split)+'.npy'
+        self.accs_fn = 'accs'+config.subset+'_'+str(config.split)+'.npy'
 
         # Build model
         self.build_model()
@@ -69,7 +65,7 @@ class Solver(object):
 
     def train(self):
         start_t = time.time()
-        best_roc_auc = 0
+        best_accs_mean = 0
         reconst_loss = nn.BCELoss()
 
         for epoch in range(self.n_epochs):
@@ -100,25 +96,38 @@ class Solver(object):
                             datetime.timedelta(seconds=time.time()-start_t)))
 
             # validation
-            roc_auc, _ = self._validation(start_t, epoch)
+            accs_mean = self._validation(start_t, epoch)
 
             # save model
-            if roc_auc > best_roc_auc:
-                print('best model: %4f' % roc_auc)
-                best_roc_auc = roc_auc
-                torch.save(self.model.state_dict(), os.path.join(self.model_save_path, 'best_model.pth'))
+            if accs_mean > best_accs_mean:
+                print('best model acc mean: %4f' % accs_mean)
+                best_accs_mean = accs_mean
+
+            torch.save(self.model.state_dict(), os.path.join(self.model_save_path, f'model_iter_{ctr}_acc_{accs_mean}.pth'))
 
         print("[%s] Train finished. Elapsed: %s"
                 % (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     datetime.timedelta(seconds=time.time() - start_t)))
 
+    def get_batch_acc(self, out, y):
+        accuracies = []
+
+        #for each prediction and ground truth in the batch
+        for prd, gt in zip(out,y):
+            prd = (prd > 0.5) * 1
+            print(f"\nprd == gt:\n{prd == gt}")
+            acc = ((prd == gt) * 1).float().mean()
+            print(f"\nACC:{acc}\n")
+            accuracies.append(acc)
+
+        return accuracies
+
     def _validation(self, start_t, epoch):
-        prd_array = []  # prediction
-        gt_array = []   # ground truth
+        accuracies = []
         ctr = 0
         self.model.eval()
         reconst_loss = nn.BCELoss()
-        for x, y in self.valid_loader:
+        for x, y, _ in self.valid_loader:
             ctr += 1
 
             # variables to cuda
@@ -139,14 +148,13 @@ class Solver(object):
             # append prediction
             out = out.detach().cpu()
             y = y.detach().cpu()
-            for prd in out:
-                prd_array.append(list(np.array(prd)))
-            for gt in y:
-                gt_array.append(list(np.array(gt)))
 
-        # get auc
-        roc_auc, pr_auc, _, _ = self.get_auc(prd_array, gt_array)
-        return roc_auc, pr_auc
+            batch_accs = self.get_batch_acc(out, y)
+            print(f"\n Validation\n all accs: {batch_accs} \n")
+            for acc in batch_accs:
+                accuracies.append(acc)
+
+        return np.array(accuracies).mean()
 
     def get_tag_list(self, config):
         if config.subset == 'top50tags':
@@ -156,23 +164,6 @@ class Solver(object):
         tag_list = np.load(path)
         return tag_list
 
-    def get_auc(self, prd_array, gt_array):
-        prd_array = np.array(prd_array)
-        gt_array = np.array(gt_array)
-
-        roc_aucs = metrics.roc_auc_score(gt_array, prd_array, average='macro')
-        pr_aucs = metrics.average_precision_score(gt_array, prd_array, average='macro')
-
-        print('roc_auc: %.4f' % roc_aucs)
-        print('pr_auc: %.4f' % pr_aucs)
-
-        roc_auc_all = metrics.roc_auc_score(gt_array, prd_array, average=None)
-        pr_auc_all = metrics.average_precision_score(gt_array, prd_array, average=None)
-
-        for i in range(self.num_class):
-            print('%s \t\t %.4f , %.4f' % (self.tag_list[i], roc_auc_all[i], pr_auc_all[i]))
-        return roc_aucs, pr_aucs, roc_auc_all, pr_auc_all
-
     def test(self):
         start_t = time.time()
         reconst_loss = nn.BCELoss()
@@ -180,8 +171,7 @@ class Solver(object):
         self.load(self.model_fn)
         self.model.eval()
         ctr = 0
-        prd_array = []  # prediction
-        gt_array = []   # ground truth
+        accuracies = []
         song_array = [] # song array
         for x, y, fn in self.data_loader:
             ctr += 1
@@ -204,18 +194,15 @@ class Solver(object):
             # append prediction
             out = out.detach().cpu()
             y = y.detach().cpu()
-            for prd in out:
-                prd_array.append(list(np.array(prd)))
-            for gt in y:
-                gt_array.append(list(np.array(gt)))
+
+            batch_accs = self.get_batch_acc(out, y)
+            print(f"\n Test\n all accs: {batch_accs} \n")
+            for acc in batch_accs:
+                accuracies.append(acc)
+
             for song in fn:
                 song_array.append(song)
 
-        # get auc
-        roc_auc, pr_auc, roc_auc_all, pr_auc_all = self.get_auc(prd_array, gt_array)
-
         # save aucs
-        np.save(open(self.roc_auc_fn, 'wb'), roc_auc_all)
-        np.save(open(self.pr_auc_fn, 'wb'), pr_auc_all)
-        np.save(open('prd.npy', 'wb'), prd_array)
+        np.save(open(self.accs_fn, 'wb'), accuracies)
         np.save(open('song_list.npy', 'wb'), song_array)
