@@ -115,9 +115,7 @@ class Solver(object):
         #for each prediction and ground truth in the batch
         for prd, gt in zip(out,y):
             prd = (prd > 0.5) * 1
-            print(f"\nprd == gt:\n{prd == gt}")
             acc = ((prd == gt) * 1).float().mean()
-            print(f"\nACC:{acc}\n")
             accuracies.append(acc)
 
         return accuracies
@@ -196,7 +194,6 @@ class Solver(object):
             y = y.detach().cpu()
 
             batch_accs = self.get_batch_acc(out, y)
-            print(f"\n Test\n all accs: {batch_accs} \n")
             for acc in batch_accs:
                 accuracies.append(acc)
 
